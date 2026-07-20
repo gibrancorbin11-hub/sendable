@@ -1,6 +1,6 @@
 {
   "name": "sendableme",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "One line, and your app knows how to talk to its users. AI-composed transactional email.",
   "type": "module",
   "main": "./dist/index.js",

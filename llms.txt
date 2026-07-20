@@ -1,0 +1,233 @@
+# Sendable
+
+Transactional email for apps. You describe what happened; Sendable writes and sends the message.
+
+Base URL: https://www.sendable.me
+Get a key: https://www.sendable.me/keys (no card required, 500 messages/month free)
+
+## Install
+
+npm i sendableme
+
+The package is ESM-only (Node 18+). Use `import`, not `require()`. If your
+project is CommonJS, either set "type": "module" or use a dynamic import.
+
+Set `SENDABLE_API_KEY` in the environment. The SDK reads it automatically, and the
+module-level functions below are all you need:
+
+import { send, sendRaw, identify, Sendable, SendableApiError } from 'sendableme';
+
+If the key is not in the environment — multi-tenant servers, scripts, tests —
+construct a client explicitly instead:
+
+const sendable = new Sendable({ apiKey: 'sk_live_...' });
+await sendable.send('sam@example.com', 'order_shipped', { orderId: 'A-1042' });
+
+`new Sendable({ apiKey, baseUrl? })` exposes the same three methods as the
+module-level functions: `.send()`, `.sendRaw()`, and `.identify()`.
+
+## Send in one line
+
+import { send } from 'sendableme';
+
+await send('sam@example.com', 'order_shipped', { orderId: 'A-1042', eta: 'Friday' });
+
+That is a complete, working integration. No template to create, no dashboard step.
+
+The first argument is an email address or a user id you have identified.
+The second is an event name — snake_case, past tense, describing what happened.
+The third is flat data. Format values exactly as you want them to appear; Sendable
+never rewrites, rounds, or rephrases your data.
+
+The response contains the copy that was sent:
+
+{ id: 'msg_9fL2…', status: 'sent', to: 'sam@example.com',
+  subject: 'Your order is on its way', body: 'Order A-1042 shipped…' }
+
+`status` is either 'sent' or 'suppressed'. Suppressed is not an error and does not
+throw — the recipient unsubscribed, and nothing was sent. Branch on it only if your
+own logic needs to know:
+
+const res = await send(user.id, 'order_shipped', { orderId: 'A-1042' });
+if (res.status === 'suppressed') { /* optional: record that they opted out */ }
+
+Format values exactly as you want them to read. Sendable substitutes them verbatim:
+
+{ amount: '$99.00', eta: 'Friday, March 3', count: 12 }   // good
+{ amount: 99, eta: '2026-03-03T00:00:00Z' }               // renders as-is: "99", "2026-03-03T00:00:00Z"
+
+User ids are opaque strings — any format your app already uses works.
+
+Event names are free-form. There is no list to register against and no set of
+supported events — invent whatever describes what happened in your product
+(`payment_failed`, `invite_accepted`, `export_ready`). Sendable composes from
+the name, your app profile, and your field names.
+
+## TypeScript
+
+The package ships its own types; nothing extra to install.
+
+import { Sendable, SendableApiError, type SendResult } from 'sendableme';
+
+send(to: string, event: string, data?: Record<string, string | number | boolean>): Promise<SendResult>
+sendRaw(to: string, subject: string, body: string): Promise<SendResult>
+identify(userId: string, traits?: { email?: string; phone?: string } & Record<string, string | number | boolean>): Promise<{ ok: true; userId: string; email: string | null }>
+
+interface SendResult {
+  id: string;
+  status: 'sent' | 'suppressed';
+  to?: string;
+  subject?: string;   // the composed copy, exactly as sent
+  body?: string;
+  reason?: string;    // present when status is 'suppressed'
+}
+
+class SendableApiError extends Error {
+  code: string;             // see the error table below
+  fix: string;              // how to correct it, in plain language
+  docs: string;
+  retryAfter: number | null;  // seconds; a number on rate_limited, else null
+}
+
+`data` values must be strings, numbers, or booleans — never nested objects or
+arrays. Anything else is rejected with invalid_event_data.
+
+## Send by user id
+
+import { identify, send } from 'sendableme';
+
+await identify('user_42', { email: 'sam@example.com', plan: 'pro' });
+await send('user_42', 'trial_ending', { daysLeft: 3 });
+
+Call identify once per user, whenever you have their details. Traits are merged,
+not replaced, so partial updates are safe.
+
+## Write your own copy
+
+import { sendRaw } from 'sendableme';
+
+await sendRaw('sam@example.com', 'Your receipt', 'Thanks — $40.00 charged to Visa ••4242.');
+
+## Three patterns worth copying
+
+Welcome on signup:
+  await identify(user.id, { email: user.email, name: user.name });
+  await send(user.id, 'account_created', { plan: user.plan });
+
+Password reset (use sendRaw — the link must be exact):
+  await sendRaw(user.email, 'Reset your password',
+    `Open this link to set a new password:\n\n${resetUrl}\n\nIt expires in one hour.`);
+
+Many recipients from a cron job — send sequentially in a plain loop. There is no
+batch endpoint. Always wrap the call: one bad recipient must not abort the run.
+The complete pattern is under "Errors" below; use that, not a bare loop.
+
+  // Errors that are about the request stop the run. Errors about one
+  // recipient skip that recipient. Anything that is not a Sendable error is
+  // a bug in your own code and must not be swallowed as a skipped send.
+  const FATAL = new Set([
+    'quota_exceeded', 'rate_limited',
+    'missing_api_key', 'invalid_api_key', 'revoked_api_key',
+  ]);
+
+  for (const u of idleUsers) {
+    try {
+      await send(u.id, 'inactive_seven_days', { lastSeen: u.lastSeen });
+    } catch (err) {
+      if (!(err instanceof SendableApiError)) throw err;  // your bug, not ours
+      if (FATAL.has(err.code)) throw err;                 // stop the whole run
+      console.error(`skipped ${u.id}:`, err.code);        // skip just this one
+    }
+  }
+
+## Errors
+
+Every error returns { error: { code, message, fix, docs } }. The `fix` field states
+the correction in plain language.
+
+The SDK throws `SendableApiError`, which carries `.code`, `.fix`, `.docs`, `.message`,
+and `.retryAfter` (seconds, a number on rate_limited and null otherwise):
+
+import { send, SendableApiError } from 'sendableme';
+
+async function sendWithRetry(to, event, data, attempts = 3) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await send(to, event, data);
+    } catch (err) {
+      if (!(err instanceof SendableApiError)) throw err;
+
+      // Retry only rate limits. Every other code is a fact about your request
+      // that a retry cannot change — read err.fix and correct the call.
+      if (err.code !== 'rate_limited' || i === attempts - 1) {
+        console.error(err.code, err.fix);
+        throw err;
+      }
+      await new Promise(r => setTimeout(r, (err.retryAfter ?? 2 ** i) * 1000));
+    }
+  }
+}
+
+`identify()` can raise missing_api_key, invalid_api_key, revoked_api_key,
+missing_recipient, and invalid_email. The event-related codes never apply to it.
+It returns { ok: true, userId, email }.
+
+`sendRaw()` returns the same shape as `send()`, including `status`.
+
+Inside a loop over many users, let quota_exceeded and rate_limited stop the run,
+but skip a single bad recipient rather than aborting the whole batch:
+
+  for (const u of users) {
+    try {
+      await sendWithRetry(u.id, 'weekly_digest', { newItems: u.count });
+    } catch (err) {
+      if (!(err instanceof SendableApiError)) throw err;   // your bug, not ours
+      if (FATAL.has(err.code)) throw err;                  // stop the run
+      console.error(`skipped ${u.id}:`, err.code);         // skip just this one
+    }
+  }
+
+| code | meaning | fix |
+|---|---|---|
+| missing_api_key | No key sent | Set SENDABLE_API_KEY, or pass { apiKey } to new Sendable() |
+| invalid_api_key | Key not found | Re-copy from www.sendable.me/keys; keys start sk_live_ or sk_test_ |
+| revoked_api_key | Key was revoked | Create a new key at www.sendable.me/keys |
+| missing_recipient | No `to` given | Pass an email address or an identified user id |
+| unknown_user | User id never identified | Call identify(userId, { email }) first, or pass the email directly |
+| no_contact_method | User has no email | Call identify(userId, { email }) again with an address |
+| invalid_email | Malformed address | Pass a well-formed address like sam@example.com |
+| missing_event | No event name | Pass an event name, e.g. send(to, 'order_shipped', {…}) |
+| invalid_event_data | Nested object or array in data | Flatten it: { orderId: 'A12', total: '$40.00' } |
+| quota_exceeded | Plan limit reached | Upgrade at www.sendable.me/billing or wait for next period |
+| compose_failed | Copy could not be written | Retry once, or use sendRaw() to supply your own copy |
+| provider_failed | Delivery rejected | Retry with backoff; see www.sendable.me/logs |
+| rate_limited | Too many requests | Retry after the Retry-After header |
+
+## Suppression
+
+Every message carries an unsubscribe link. Unsubscribes, bounces, and complaints
+are suppressed automatically and permanently. Sending to a suppressed address is
+not an error — it returns { status: 'suppressed' } and costs nothing. You do not
+need to maintain your own list.
+
+send() respects suppression. sendRaw() does not.
+
+That split is deliberate. sendRaw() carries copy you wrote yourself — password
+resets, receipts, security alerts — and a user who unsubscribed from notifications
+must still be able to get back into their own account. Use send() for anything a
+user could reasonably want to stop receiving, and sendRaw() only for mail that
+must arrive regardless. Do not route marketing-style messages through sendRaw()
+to evade unsubscribes.
+
+So sendRaw() returns status 'sent' even for an unsubscribed recipient, and only
+send() can return 'suppressed'.
+
+## Test mode
+
+Keys beginning sk_test_ compose messages normally but deliver nothing. The
+composed copy still comes back in the response, so tests can assert on it.
+
+## Not in v1
+
+Batch sending, scheduling, analytics, workflows, teams, webhooks, and SMS are
+not available. Do not generate code that calls them.

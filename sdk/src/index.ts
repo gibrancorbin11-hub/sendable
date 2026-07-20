@@ -42,8 +42,15 @@ export class Sendable {
   constructor(opts: SendableOptions = {}) {
     const key = opts.apiKey ?? process.env.SENDABLE_API_KEY;
     if (!key)
-      throw new Error(
-        'No Sendable API key. Set SENDABLE_API_KEY in your environment, or pass { apiKey } to the constructor. Get a key at https://www.sendable.me/keys',
+      // A SendableApiError, not a bare Error, so `missing_api_key` is catchable
+      // with `.code` exactly as the error table documents — including from the
+      // zero-config module-level functions, where this is the first thing a
+      // developer hits if they forget the env var.
+      throw new SendableApiError(
+        'missing_api_key',
+        'No Sendable API key. Set SENDABLE_API_KEY in your environment, or pass { apiKey } to the constructor.',
+        'Set SENDABLE_API_KEY, or pass { apiKey } to new Sendable(). Get a key at https://www.sendable.me/keys',
+        'https://www.sendable.me/errors#missing_api_key',
       );
     this.apiKey = key;
     this.baseUrl = opts.baseUrl ?? process.env.SENDABLE_BASE_URL ?? 'https://www.sendable.me';
@@ -63,7 +70,10 @@ export class Sendable {
   }
 
   /** Tell Sendable who a user is, so you can send to them by id afterwards. */
-  async identify(userId: string, traits: { email?: string; phone?: string } & Data = {}) {
+  async identify(
+    userId: string,
+    traits: { email?: string; phone?: string } & Data = {},
+  ): Promise<{ ok: true; userId: string; email: string | null }> {
     const { email, phone, ...rest } = traits;
     return this.post('/v1/identify', { userId, email, phone, traits: rest });
   }
