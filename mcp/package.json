@@ -1,6 +1,6 @@
 {
   "name": "sendableme-mcp",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "MCP server for Sendable \u2014 let Claude and Cursor send transactional email from your app.",
   "type": "module",
   "bin": {

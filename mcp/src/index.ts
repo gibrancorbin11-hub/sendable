@@ -19,29 +19,36 @@ import { Sendable, SendableApiError } from 'sendableme';
 const API_KEY = process.env.SENDABLE_API_KEY;
 const BASE_URL = process.env.SENDABLE_BASE_URL ?? 'https://www.sendable.me';
 
-if (!API_KEY) {
-  // Written to stderr so it never corrupts the stdio protocol stream.
-  console.error(
-    'SENDABLE_API_KEY is not set. Get a free key at https://www.sendable.me/keys ' +
-      'and add it to this server\'s env in your MCP client config.',
-  );
-  process.exit(1);
+/*
+ * The client is built lazily, on the first tool call, not at startup. That lets
+ * the server start and answer tools/list with no key set — which is how MCP
+ * clients (and directory crawlers like Glama) introspect a server before it is
+ * configured. The key is only required to actually send.
+ */
+let client: Sendable | null = null;
+function getClient(): Sendable {
+  if (!API_KEY) {
+    throw new SendableApiError(
+      'missing_api_key',
+      'SENDABLE_API_KEY is not set.',
+      'Get a free key at https://www.sendable.me/keys and add it to this server\'s env in your MCP client config.',
+      'https://www.sendable.me/keys',
+    );
+  }
+  return (client ??= new Sendable({ apiKey: API_KEY, baseUrl: BASE_URL }));
 }
-
-const sendable = new Sendable({ apiKey: API_KEY, baseUrl: BASE_URL });
 
 /**
  * A test key composes normally and delivers nothing. Surfacing that in every
  * result stops an agent reporting "email sent" when nothing left the building.
  */
-const MODE = API_KEY.startsWith('sk_test_') ? 'test' : 'live';
 const modeNote =
-  MODE === 'test'
+  API_KEY?.startsWith('sk_test_')
     ? '\n\n(test mode: composed but NOT delivered — use a sk_live_ key to actually send)'
     : '';
 
 const server = new Server(
-  { name: 'sendableme', version: '1.0.0' },
+  { name: 'sendableme', version: '1.0.3' },
   { capabilities: { tools: {} } },
 );
 
@@ -123,7 +130,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   try {
     switch (req.params.name) {
       case 'send': {
-        const r = await sendable.send(args.to, args.event, args.data ?? {});
+        const r = await getClient().send(args.to, args.event, args.data ?? {});
         if (r.status === 'suppressed') {
           return ok(
             `Not sent — ${args.to} unsubscribed or previously bounced. This is not an error and ` +
@@ -135,11 +142,11 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         );
       }
       case 'send_raw': {
-        const r = await sendable.sendRaw(args.to, args.subject, args.body);
+        const r = await getClient().sendRaw(args.to, args.subject, args.body);
         return ok(`Sent to ${r.to}\n\nSubject: ${r.subject}\n\n${r.body}${modeNote}`);
       }
       case 'identify': {
-        const r = await sendable.identify(args.userId, {
+        const r = await getClient().identify(args.userId, {
           email: args.email,
           ...(args.traits ?? {}),
         });
@@ -162,4 +169,4 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 });
 
 await server.connect(new StdioServerTransport());
-console.error(`sendableme MCP server ready (${MODE} mode, ${BASE_URL})`);
+console.error(`sendableme MCP server ready (${API_KEY ? (API_KEY.startsWith("sk_test_") ? "test" : "live") : "no key — introspection only"}, ${BASE_URL})`);
