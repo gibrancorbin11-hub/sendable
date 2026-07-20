@@ -1,0 +1,18 @@
+# Smithery deployment config for the Sendable MCP server.
+# Runs the published npm package over stdio and maps the API key into its env.
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required: ["sendableApiKey"]
+    properties:
+      sendableApiKey:
+        type: string
+        title: "Sendable API key"
+        description: "Get a free key at https://www.sendable.me/keys — 500 messages/month, no card."
+  commandFunction: |
+    (config) => ({
+      command: "npx",
+      args: ["-y", "sendableme-mcp"],
+      env: { SENDABLE_API_KEY: config.sendableApiKey }
+    })
