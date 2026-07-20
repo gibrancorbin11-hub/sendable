@@ -1,6 +1,6 @@
 {
   "name": "sendableme-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "MCP server for Sendable \u2014 let Claude and Cursor send transactional email from your app.",
   "type": "module",
   "bin": {
@@ -37,5 +37,9 @@
   "engines": {
     "node": ">=18"
   },
-  "mcpName": "me.sendable/sendable"
+  "mcpName": "me.sendable/sendable",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gibrancorbin11-hub/sendable.git"
+  }
 }
