@@ -1,0 +1,41 @@
+{
+  "name": "sendableme-mcp",
+  "version": "1.0.1",
+  "description": "MCP server for Sendable \u2014 let Claude and Cursor send transactional email from your app.",
+  "type": "module",
+  "bin": {
+    "sendableme-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "email",
+    "transactional",
+    "sendable",
+    "claude",
+    "cursor"
+  ],
+  "license": "MIT",
+  "homepage": "https://www.sendable.me",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "sendableme": "^1.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "mcpName": "me.sendable/sendable"
+}

@@ -1,0 +1,48 @@
+{
+  "name": "sendableme",
+  "version": "1.0.1",
+  "description": "One line, and your app knows how to talk to its users. AI-composed transactional email.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "email",
+    "transactional",
+    "notifications",
+    "sendable",
+    "llm"
+  ],
+  "license": "MIT",
+  "homepage": "https://sendable.me",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/proxysoftwaregroup/sendable.git"
+  },
+  "bugs": {
+    "url": "https://sendable.me"
+  },
+  "author": "Proxy Software Group",
+  "engines": {
+    "node": ">=18"
+  }
+}
