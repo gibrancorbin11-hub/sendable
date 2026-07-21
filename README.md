@@ -21,6 +21,13 @@ That's a complete integration. Adding a new message type is a new string.
 Get a free API key at [sendable.me/keys](https://www.sendable.me/keys) — 500
 messages a month, no card.
 
+## Try it in your browser
+
+One click imports the SaaS-welcome example and runs it on Replit — add your
+`SENDABLE_API_KEY` in Secrets and hit Run:
+
+[![Run on Replit](https://replit.com/badge/github/gibrancorbin11-hub/sendable)](https://replit.com/github/gibrancorbin11-hub/sendable)
+
 ---
 
 ## What's in this repo
