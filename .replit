@@ -1,0 +1,14 @@
+run = "cd templates/01-saas-welcome && npm install && node server.js"
+entrypoint = "templates/01-saas-welcome/server.js"
+
+[env]
+# Paste your Sendable key here (get one free at https://www.sendable.me/keys).
+# sk_test_ composes without delivering; sk_live_ actually sends.
+SENDABLE_API_KEY = ""
+
+[[ports]]
+localPort = 3001
+externalPort = 80
+
+[nix]
+channel = "stable-24_05"

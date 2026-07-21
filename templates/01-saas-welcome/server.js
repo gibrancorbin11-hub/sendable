@@ -40,5 +40,5 @@ app.post('/signup', async (req, res) => {
 
 const PORT = process.env.PORT ?? 3001;
 app.listen(PORT, () =>
-  console.log('POST http://localhost:${PORT}/signup  {"email":"you@example.com","name":"Sam"}'),
+  console.log(`POST http://localhost:${PORT}/signup  {"email":"you@example.com","name":"Sam"}`),
 );
