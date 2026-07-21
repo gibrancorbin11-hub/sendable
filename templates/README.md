@@ -3,6 +3,13 @@
 Four runnable examples. Each is a real integration against the live API — not a
 demo stub. Clone one, add a key, and it sends actual email.
 
+| Template | What it shows |
+|---|---|
+| [`01-saas-welcome`](./01-saas-welcome) | Signup → welcome email in two lines. Boots on Replit. |
+| [`02-order-status`](./02-order-status) | Order events (`order_shipped`, etc.) → status email. |
+| [`03-booking-confirm`](./03-booking-confirm) | Booking confirmation with date/time passed through verbatim. |
+| [`04-ai-email-agent`](./04-ai-email-agent) | **Give an AI agent the power to send email.** Describe an event in plain language; Claude calls Sendable over MCP and it sends. |
+
 ```bash
 cd 01-saas-welcome
 npm install

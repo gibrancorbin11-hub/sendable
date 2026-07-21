@@ -1,0 +1,11 @@
+{
+  "name": "sendable-ai-email-agent",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node agent.js" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "sendableme-mcp": "^1.0.3"
+  }
+}
