@@ -71,7 +71,7 @@ import { Sendable, SendableApiError, type SendResult } from 'sendableme';
 
 send(to: string, event: string, data?: Record<string, string | number | boolean>): Promise<SendResult>
 sendRaw(to: string, subject: string, body: string): Promise<SendResult>
-identify(userId: string, traits?: { email?: string; phone?: string } & Record<string, string | number | boolean>): Promise<{ ok: true; userId: string; email: string | null }>
+identify(userId: string, traits?: { email?: string } & Record<string, string | number | boolean>): Promise<{ ok: true; userId: string; email: string | null }>
 
 interface SendResult {
   id: string;
@@ -118,27 +118,10 @@ Password reset (use sendRaw — the link must be exact):
   await sendRaw(user.email, 'Reset your password',
     `Open this link to set a new password:\n\n${resetUrl}\n\nIt expires in one hour.`);
 
-Many recipients from a cron job — send sequentially in a plain loop. There is no
-batch endpoint. Always wrap the call: one bad recipient must not abort the run.
-The complete pattern is under "Errors" below; use that, not a bare loop.
-
-  // Errors that are about the request stop the run. Errors about one
-  // recipient skip that recipient. Anything that is not a Sendable error is
-  // a bug in your own code and must not be swallowed as a skipped send.
-  const FATAL = new Set([
-    'quota_exceeded', 'rate_limited',
-    'missing_api_key', 'invalid_api_key', 'revoked_api_key',
-  ]);
-
-  for (const u of idleUsers) {
-    try {
-      await send(u.id, 'inactive_seven_days', { lastSeen: u.lastSeen });
-    } catch (err) {
-      if (!(err instanceof SendableApiError)) throw err;  // your bug, not ours
-      if (FATAL.has(err.code)) throw err;                 // stop the whole run
-      console.error(`skipped ${u.id}:`, err.code);        // skip just this one
-    }
-  }
+Many recipients (a cron job): there is no batch endpoint — send sequentially in a
+plain loop, and wrap each call so one bad recipient can't abort the whole run. The
+complete, copy-paste-ready version — with its imports and the FATAL set — is the
+last snippet under "Errors" below. Use that rather than a bare loop.
 
 ## Errors
 
@@ -150,32 +133,47 @@ and `.retryAfter` (seconds, a number on rate_limited and null otherwise):
 
 import { send, SendableApiError } from 'sendableme';
 
+// The only codes a retry can change: a rate limit, or a transient compose or
+// delivery failure. Every other code is a fact about your request that retrying
+// cannot fix — read err.fix and correct the call.
+const RETRYABLE = new Set(['rate_limited', 'compose_failed', 'provider_failed']);
+
 async function sendWithRetry(to, event, data, attempts = 3) {
   for (let i = 0; i < attempts; i++) {
     try {
       return await send(to, event, data);
     } catch (err) {
       if (!(err instanceof SendableApiError)) throw err;
-
-      // Retry only rate limits. Every other code is a fact about your request
-      // that a retry cannot change — read err.fix and correct the call.
-      if (err.code !== 'rate_limited' || i === attempts - 1) {
+      if (!RETRYABLE.has(err.code) || i === attempts - 1) {
         console.error(err.code, err.fix);
         throw err;
       }
+      // retryAfter is in seconds (set on rate_limited); otherwise back off.
       await new Promise(r => setTimeout(r, (err.retryAfter ?? 2 ** i) * 1000));
     }
   }
 }
 
-`identify()` can raise missing_api_key, invalid_api_key, revoked_api_key,
-missing_recipient, and invalid_email. The event-related codes never apply to it.
-It returns { ok: true, userId, email }.
+`send()` can raise any code in the table below: the api-key codes, plus
+missing_recipient, unknown_user, no_contact_method, invalid_email, missing_event,
+invalid_event_data, quota_exceeded, compose_failed, provider_failed, and
+rate_limited.
+
+`identify()` can raise only missing_api_key, invalid_api_key, revoked_api_key, and
+invalid_email (when the email trait is malformed). The event- and recipient-related
+codes never apply to it. It returns { ok: true, userId, email }.
 
 `sendRaw()` returns the same shape as `send()`, including `status`.
 
-Inside a loop over many users, let quota_exceeded and rate_limited stop the run,
-but skip a single bad recipient rather than aborting the whole batch:
+The complete batch pattern. A FATAL code (a quota or key problem) affects every
+send, so it stops the whole run; anything else skips just that one recipient. This
+block reuses the `sendWithRetry` helper and the import from the snippet above:
+
+  // Codes where continuing the loop is pointless — stop the whole run.
+  const FATAL = new Set([
+    'quota_exceeded', 'rate_limited',
+    'missing_api_key', 'invalid_api_key', 'revoked_api_key',
+  ]);
 
   for (const u of users) {
     try {
